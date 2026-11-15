@@ -7,6 +7,7 @@
 | ID | Title | Severity | Priority |
 |---|---|---|---|
 | BUG-001 | Creating a transaction increases product stock instead of decreasing it | Critical | P1 |
+| BUG-012 | Concurrent transactions lose stock updates (race condition) | Critical | P1 |
 | BUG-002 | Updating a product overwrites its price with the quantity value | High | P1 |
 | BUG-003 | Creating a user with a duplicate email returns 201 with a fake user (id 0) | High | P1 |
 | BUG-004 | Products can be created with a negative or zero price | High | P2 |
@@ -17,7 +18,6 @@
 | BUG-009 | User email format is not validated | Medium | P3 |
 | BUG-010 | No upper limit on product price | Low | P3 |
 | BUG-011 | PUT /products/{id} rejects partial updates; UpdateProductDto is unused | Low | P4 |
-| BUG-012 | Concurrent transactions lose stock updates (race condition) | Critical | P1 |
 
 ---
 
