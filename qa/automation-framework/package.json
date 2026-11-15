@@ -1,0 +1,19 @@
+{
+  "name": "automation-framework",
+  "version": "1.0.0",
+  "main": "performance-test.js",
+  "scripts": {
+    "test": "playwright test",
+    "report": "playwright show-report"
+
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@playwright/test": "^1.65.1",
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2"
+  }
+}
