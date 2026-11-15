@@ -30,7 +30,7 @@ export class UsersService {
     } catch (error: unknown) {
       if (
         error instanceof QueryFailedError &&
-        (error as any).code === '23505'
+        (error as { code?: string }).code === '23505'
       ) {
         return {
           statusCode: HttpStatus.CREATED,
@@ -120,7 +120,7 @@ export class UsersService {
       if (error instanceof NotFoundException) throw error;
       if (
         error instanceof QueryFailedError &&
-        (error as any).code === '23505'
+        (error as { code?: string }).code
       ) {
         throw new ConflictException('Email already exists');
       }
