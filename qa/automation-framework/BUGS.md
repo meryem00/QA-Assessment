@@ -17,6 +17,7 @@
 | BUG-009 | User email format is not validated | Medium | P3 |
 | BUG-010 | No upper limit on product price | Low | P3 |
 | BUG-011 | PUT /products/{id} rejects partial updates; UpdateProductDto is unused | Low | P4 |
+| BUG-012 | Concurrent transactions lose stock updates (race condition) | Critical | P1 |
 
 ---
 
@@ -435,3 +436,60 @@ Confirm the intended behaviour with the team. If partial updates are intended, u
 
 **Impact:**
 Clients must resend the full object to change one field, which increases the risk of overwriting data by accident.
+
+---
+
+### BUG-012: Concurrent transactions lose stock updates (race condition)
+
+**Severity:** Critical | **Priority:** P1 | **Module:** Transactions (affects Products) | **Endpoint:** POST /transactions
+
+**Preconditions:**
+- API running locally; k6 installed.
+- The k6 script creates a fresh user and a product with an initial stock of 100000 in `setup()`.
+
+**Steps to reproduce:**
+1. Run the load test:
+   ```powershell
+   k6 run qa/automation-framework/performance-test.js
+   ```
+   Load profile: ramp up to 20 virtual users over 30s, hold for 1 min, ramp down over 30s. Each user buys 1 unit of the same product per second.
+2. Compare the number of successful transactions with the final stock printed by `teardown()`.
+
+**Expected Result:**
+- Every successful transaction (201) changes the stock by exactly its quantity.
+- With 1747 successful purchases of 1 unit: final stock = 100000 − 1747 = **98253**.
+- (Even with BUG-001 still present, all updates should be applied: 100000 + 1747 = **101747**.)
+
+**Actual Result:**
+- All 1747 transactions returned 201 Created (0% errors, 100% checks passed).
+- Final stock is **100592**, so only 592 of the 1747 stock updates were applied.
+- **1155 stock updates (≈66%) were silently lost.**
+
+**Evidence:**
+```
+checks_succeeded...: 100.00% 3494 out of 3494
+http_req_failed....: 0.00%  0 out of 1750
+iterations.........: 1747
+INFO[0121] Initial stock: 100000 | Final stock: 100592   source=console
+```
+
+**Root Cause:**
+`transactions.service.ts`, `create()` (lines 27–65) uses a read-modify-write pattern with no database transaction or row lock:
+1. Line 35: the product is **read** (`productRepository.findOne`).
+2. Line 61: the new stock is **calculated in application memory** (`product.quantity += dto.quantity`).
+3. Line 65: the product is **written back** (`productRepository.save(product)`).
+
+When requests run at the same time, several of them read the same stock value, each calculates its own result, and each writes it back. The last write overwrites the others ("lost update"). The stock check (`dto.quantity > product.quantity`) is also done on a value that may already be outdated.
+
+**Suggested Fix:**
+- Update the stock atomically in the database instead of in application code:
+  ```sql
+  UPDATE product SET quantity = quantity - :qty
+  WHERE id = :id AND quantity >= :qty
+  ```
+  and check that exactly 1 row was affected (otherwise the stock is insufficient → 409).
+- Run the stock update and the transaction insert inside one database transaction (`dataSource.transaction(...)`), or lock the row with `SELECT ... FOR UPDATE` (TypeORM: `lock: { mode: 'pessimistic_write' }`).
+- Keep the k6 test (with the stock check in `teardown()`) as a regression test for this fix.
+
+**Impact:**
+Under real traffic, inventory becomes wrong even though every request reports success. Once BUG-001 is fixed (stock decreasing), this same race causes **overselling**: stock decreases more slowly than items are sold, so customers can buy products that are no longer available. This bug cannot be found by single-request functional testing; it only shows up under concurrent load.
